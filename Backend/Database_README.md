@@ -50,7 +50,8 @@ settings, notifications, audit_admin_changes are standalone support tables.
 ```
 ## Database ER Diagram
 
-![ResQ Database ER Diagram](assets/DATABASE_ERD.svg)
+![ResQ Database ER Diagram](assets/DATABASE_ERD.png)
+![Link](assets)
 
 ---
 
