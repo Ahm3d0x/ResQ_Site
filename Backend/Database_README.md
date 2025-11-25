@@ -1,6 +1,4 @@
-# **ResQ — Full Database Documentation (English Version)**
-
-### *Production‑Ready, Clean, Complete — For GitHub (DATABASE.md)*
+# **ResQ — Full Database Documentation**
 
 ---
 
