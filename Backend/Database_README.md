@@ -1,58 +1,43 @@
-# **ResQ >> Full Database Documentation (MySQL)**
-
-Professional, production-ready database documentation generated from the official ResQ system plan. This file is ready to publish directly on **GitHub**.
+# **ResQ >> Full MySQL Database Documentation**
 
 ---
 
-# 📌 **1. Introduction**
+# 📘 **1. Introduction**
 
-This documentation describes the full **MySQL database architecture** used by the **ResQ Vehicle Accident Detection & Emergency Response System**.
+This document provides the **complete and updated database documentation** for the **ResQ Emergency Response System**, which integrates smart hardware installed in vehicles to automatically detect accidents, confirm incidents, assign ambulances, and notify hospitals in real time.
 
-The system connects vehicle‑installed hardware devices to a backend that detects accidents, confirms them, assigns ambulances, and notifies hospitals — all in **real time**.
+This documentation fully supports the system features described in the project plan, including:
 
-This documentation is fully aligned with the system plan:
-**ResQ website plan.pdf**
-
----
-
-# 📌 **2. Technologies Used**
-
-The database MUST comply with the system's strict technology rules:
-
-* **MySQL** as the only database engine.
-* `utf8mb4` charset for **full English + Arabic support**.
-* Database accessed only through:
-
-  * **Node.js** backend
-  * **Express.js** API layer
+* Real‑time incident creation
+* 10‑second confirmation workflow
+* Automatic & manual ambulance assignment
+* Multi‑dashboard access (Admin, User, Hospital, Visitor)
+* Full English & Arabic language support
+* Logging hardware activity and visitor public searches
 
 ---
 
-# 📌 **3. Entity Relationship Overview (ERD Summary)**
+# 📌 **2. Technology & Design Constraints**
 
-Main Entities:
+The system strictly uses the following technologies:
 
-* Users
-* Devices
-* Hospitals
-* Ambulances
-* HardwareRequests
-* Incidents
-* IncidentLogs
+* **MySQL** — main relational database
+* **Node.js + Express** — backend runtime & API
+* **Socket.io** — real‑time communication
+* **HTML, TailwindCSS, Vanilla JS** — frontend
 
-Relationships:
+Database encoding:
 
-* User ↦ many Devices
-* Device ↦ many HardwareRequests
-* Device ↦ many Incidents
-* Hospital ↦ one User (role = hospital)
-* Hospital ↦ many Incidents
-* Ambulance ↦ many Incidents
-* Incident ↦ many IncidentLogs
+```
+CHARACTER SET: utf8mb4
+COLLATION: utf8mb4_general_ci
+```
+
+This ensures **full Arabic + English support**.
 
 ---
 
-# 📌 **4. Global Recommended MySQL Settings**
+# 📌 **3. Global Database Settings**
 
 ```sql
 CREATE DATABASE resq
@@ -63,174 +48,41 @@ USE resq;
 
 ---
 
+# 📌 **4. Entity Overview (Tables List)**
+
+The ResQ system contains the following core tables:
+
+1. **users** – all system accounts
+2. **devices** – hardware installed in vehicles
+3. **hospitals** – hospital information
+4. **ambulances** – ambulance vehicle tracking
+5. **hardware_requests** – raw device requests
+6. **incidents** – accident cases
+7. **incident_logs** – historical timeline of incident activity
+8. **visitor_searches** – public visitor search attempts *(NEW)*
+
+---
+
 # 📌 **5. Table Documentation**
 
-Each table includes: purpose, fields, constraints, relationships, and recommended indexes.
+Each table includes: purpose, field details, relationships, and SQL creation.
 
 ---
 
-# 🧩 **5.1 Users Table** (`users`)
+# 🧩 **5.1 Users Table (`users`)**
 
 ### Purpose
 
-Stores all system accounts:
-
-* Admins
-* Vehicle Owners
-* Hospital Accounts
+Stores all system accounts: Admins, Vehicle Owners, and Hospital Accounts.
 
 ### Key Fields
 
-* `id` — primary user ID
-* `role` — admin / user / hospital
-* `lang` — preferred interface language (`en` or `ar`)
-* `email` — login identifier (unique)
-* `password_hash` — encrypted password
+* `name`, `email`, `phone`
+* `role`: admin/user/hospital
+* `lang`: preferred UI language (en/ar)
+* `is_active`: account status
 
-### Relationships
-
-* One User → Many Devices
-* One User (role = hospital) → One Hospital
-
----
-
-# 🧩 **5.2 Devices Table** (`devices`)
-
-### Purpose
-
-Represents a hardware device installed inside a vehicle.
-
-### Key Fields
-
-* `device_uid` — unique hardware ID
-* `user_id` — owner of this device
-* `car_plate`, `car_model`
-* `status` — active / inactive / maintenance
-
-### Relationships
-
-* Device ↦ belongs to one User
-* Device ↦ many HardwareRequests
-* Device ↦ many Incidents
-
----
-
-# 🧩 **5.3 Hospitals Table** (`hospitals`)
-
-### Purpose
-
-Stores hospital details, location, and assigned user account.
-
-### Key Fields
-
-* `user_id` — owner account (role = hospital)
-* `lat`, `lng` — precise coordinates
-* Full detailed address
-
-### Relationships
-
-* Hospital ↦ belongs to one User
-* Hospital ↦ many Incidents
-
----
-
-# 🧩 **5.4 Ambulances Table** (`ambulances`)
-
-### Purpose
-
-Tracks each ambulance’s status and latest GPS location.
-
-### Key Fields
-
-* `code` — unique ambulance identifier
-* `status` — available / busy / offline / en_route_incident / en_route_hospital
-* `lat`, `lng`
-
-### Relationships
-
-* Ambulance ↦ many Incidents
-
----
-
-# 🧩 **5.5 Hardware Requests Table** (`hardware_requests`)
-
-### Purpose
-
-Stores **raw JSON requests** coming from the hardware device.
-
-### Key Fields
-
-* `request_type` — alert / cancel / heartbeat / status
-* `raw_payload` — full JSON sent from device
-* Optional: `incident_id`
-
-### Relationships
-
-* One Device → Many HardwareRequests
-* Optional link → Incident
-
----
-
-# 🧩 **5.6 Incidents Table** (`incidents`)
-
-### Purpose
-
-Represents a complete accident case.
-
-### Key Fields
-
-* `status`: pending / confirmed / canceled / assigned / in_progress / completed
-* `mode`: auto / manual
-* `assigned_ambulance_id`
-* `assigned_hospital_id`
-* `hardware_request_id`
-
-### Core Timestamps
-
-* `created_at`
-* `confirmed_at`
-* `resolved_at`
-
-### Relationships
-
-* Incident → Device
-* Incident → User
-* Incident → Hospital
-* Incident → Ambulance
-* Incident → Many IncidentLogs
-
----
-
-# 🧩 **5.7 Incident Logs Table** (`incident_logs`)
-
-### Purpose
-
-Stores the entire timeline of actions taken on an incident.
-
-### Key Fields
-
-* `action` — created / confirmed / assigned_ambulance … etc.
-* `performed_by` — system / admin:ID / device:UID
-* `note` — optional details
-
-### Relationships
-
-* Many logs → One Incident
-
----
-
-# 📌 **6. Full MySQL CREATE TABLE Statements**
-
-Below are the final recommended table definitions (ready to run). They match the system plan exactly.
-
-✔ utf8mb4 enabled
-✔ All timestamps managed
-✔ Full English & Arabic support
-✔ Designed for Node.js + Express + Socket.io backend
-
----
-
-## 🔹 `users`
+### SQL
 
 ```sql
 CREATE TABLE users (
@@ -243,14 +95,19 @@ CREATE TABLE users (
   lang CHAR(2) NOT NULL DEFAULT 'en',
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_role(role)
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 ```
 
 ---
 
-## 🔹 `devices`
+# 🧩 **5.2 Devices Table (`devices`)**
+
+### Purpose
+
+Represents hardware installed inside vehicles.
+
+### SQL
 
 ```sql
 CREATE TABLE devices (
@@ -268,7 +125,13 @@ CREATE TABLE devices (
 
 ---
 
-## 🔹 `hospitals`
+# 🧩 **5.3 Hospitals Table (`hospitals`)**
+
+### Purpose
+
+Stores hospital details, address, and location.
+
+### SQL
 
 ```sql
 CREATE TABLE hospitals (
@@ -285,14 +148,19 @@ CREATE TABLE hospitals (
   phone VARCHAR(30),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  INDEX idx_location(lat, lng)
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 ```
 
 ---
 
-## 🔹 `ambulances`
+# 🧩 **5.4 Ambulances Table (`ambulances`)**
+
+### Purpose
+
+Tracks ambulance vehicles and their last known location.
+
+### SQL
 
 ```sql
 CREATE TABLE ambulances (
@@ -302,14 +170,19 @@ CREATE TABLE ambulances (
   lng DECIMAL(10,7),
   status ENUM('available','busy','offline','en_route_incident','en_route_hospital') DEFAULT 'available',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_status(status)
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 ```
 
 ---
 
-## 🔹 `hardware_requests`
+# 🧩 **5.5 Hardware Requests Table (`hardware_requests`)**
+
+### Purpose
+
+Stores **raw JSON** data coming from hardware installed in vehicles.
+
+### SQL
 
 ```sql
 CREATE TABLE hardware_requests (
@@ -321,14 +194,19 @@ CREATE TABLE hardware_requests (
   raw_payload JSON NOT NULL,
   incident_id BIGINT UNSIGNED NULL,
   received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE,
-  INDEX idx_device(device_id)
+  FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
 );
 ```
 
 ---
 
-## 🔹 `incidents`
+# 🧩 **5.6 Incidents Table (`incidents`)**
+
+### Purpose
+
+Represents an accident or emergency detected by a device.
+
+### SQL
 
 ```sql
 CREATE TABLE incidents (
@@ -356,7 +234,13 @@ CREATE TABLE incidents (
 
 ---
 
-## 🔹 `incident_logs`
+# 🧩 **5.7 Incident Logs Table (`incident_logs`)**
+
+### Purpose
+
+Tracks all changes and events related to an incident.
+
+### SQL
 
 ```sql
 CREATE TABLE incident_logs (
@@ -366,57 +250,80 @@ CREATE TABLE incident_logs (
   performed_by VARCHAR(100) NOT NULL,
   note VARCHAR(1000),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE CASCADE,
-  INDEX idx_incident(incident_id)
+  FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE CASCADE
 );
 ```
 
 ---
 
-# 📌 **7. 10‑Second Confirmation Logic (Backend + DB)**
+# 🧩 **5.8 Visitor Searches Table (`visitor_searches`)**
 
-The DB stores:
+### Purpose
 
-* `status = 'pending'`
-* Timer deadline (backend)
-* HardwareRequests → event trace
+Logs public visitor search attempts for a Device UID from the landing page.
 
-Backend Worker:
+### SQL
 
-* Waits 10 seconds
-* If `cancel` request found → status = canceled
-* Else → status = confirmed
-* Then backend assigns ambulance + hospital
+```sql
+CREATE TABLE visitor_searches (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  visitor_name VARCHAR(200) NOT NULL,
+  visitor_email VARCHAR(255) NOT NULL,
+  device_uid_searched VARCHAR(128) NOT NULL,
+  search_query_raw VARCHAR(255) NULL,
+  incident_id BIGINT UNSIGNED NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE SET NULL
+);
+```
 
 ---
 
-# 📌 **8. Backup & Archiving Recommendations**
+# 📌 **6. 10‑Second Confirmation Workflow**
 
-* Daily full SQL dump
-* Hourly binary logs (binlog)
+* Device sends `alert` → incident created in `pending` state
+* User has **10 seconds** to cancel
+* If canceled → status becomes `canceled`
+* If no cancel → backend marks incident `confirmed`
+* System assigns nearest ambulance & nearest hospital
+* All steps logged in `incident_logs`
+
+---
+
+# 📌 **7. Relationships Summary**
+
+* **User → Devices → Incidents → IncidentLogs**
+* **Device → HardwareRequests**
+* **Ambulance → Incidents**
+* **Hospital → Incidents**
+* **Visitor → visitor_searches → optional Incident**
+
+---
+
+# 📌 **8. ER Diagram Structure**
+
+*(Textual description for GitHub — PNG version can be generated separately)*
+
+* `users` 1—∞ `devices`
+* `devices` 1—∞ `hardware_requests`
+* `devices` 1—∞ `incidents`
+* `users` 1—∞ `incidents`
+* `incidents` 1—∞ `incident_logs`
+* `ambulances` 1—∞ `incidents`
+* `hospitals` 1—∞ `incidents`
+* `visitor_searches` 0/1 — 1 `incidents``
+
+---
+
+# 📌 **9. Backup & Maintenance**
+
+* Daily full backup
+* Hourly binlog incremental
 * Archive old hardware_requests
-* Index maintenance every 30–60 days
+* Monitor incident volume for scaling
 
 ---
 
-# 📌 **9. Security Guidelines**
+# 🎉 **10. End of Documentation**
 
-* Only store `password_hash` (bcrypt/argon2)
-* No plaintext passwords
-* Restrict DB user permissions
-* Use prepared statements (Node/MySQL2)
-* Log all critical actions in `incident_logs`
-
----
-
-# 📌 **10. Final Notes**
-
-This database design:
-
-* Matches the official system workflow
-* Supports Arabic + English fully
-* Works with Node.js + Express + Socket.io
-* Fits real-time updates and heavy device traffic
-* Ready to publish directly on **GitHub** as `DATABASE.md`
-
----
+ **ResQ MySQL Database**
