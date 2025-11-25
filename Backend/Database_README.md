@@ -48,6 +48,9 @@ visitor_searches 0/1 ──── 1 incidents (optional)
 
 settings, notifications, audit_admin_changes are standalone support tables.
 ```
+## Database ER Diagram
+
+![ResQ Database ER Diagram](.assets/DATABASE_ERD.svg)
 
 ---
 
