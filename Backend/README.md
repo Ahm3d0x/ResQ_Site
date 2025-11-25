@@ -1,0 +1,2 @@
+# ResQ_Site
+This project aims to build a complete web platform connected to a hardware device installed in vehicles.  The hardware predicts or detects accidents and sends requests to the server with all relevant data. The  system then identifies the vehicle, its owner, the accident location, and assigns the nearest available  ambulance to the incident, directing it to the closest suitable hospital.
