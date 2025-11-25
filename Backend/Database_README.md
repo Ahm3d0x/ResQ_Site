@@ -1,329 +1,395 @@
-# **ResQ >> Full MySQL Database Documentation**
+# **ResQ — Full Database Documentation (English Version)**
+
+### *Production‑Ready, Clean, Complete — For GitHub (DATABASE.md)*
 
 ---
 
-# 📘 **1. Introduction**
+# **1. Overview**
 
-This document provides the **complete and updated database documentation** for the **ResQ Emergency Response System**, which integrates smart hardware installed in vehicles to automatically detect accidents, confirm incidents, assign ambulances, and notify hospitals in real time.
+The **ResQ Database** powers the complete workflow of detecting vehicle accidents, validating alerts, assigning ambulances, selecting hospitals, and displaying the entire flow on real‑time dashboards.
 
-This documentation fully supports the system features described in the project plan, including:
+This documentation describes **all database tables**, **relationships**, **views**, **stored procedures**, and **data logic rules**, structured for production use.
 
-* Real‑time incident creation
-* 10‑second confirmation workflow
-* Automatic & manual ambulance assignment
-* Multi‑dashboard access (Admin, User, Hospital, Visitor)
-* Full English & Arabic language support
-* Logging hardware activity and visitor public searches
+**Important Note:**
+Ambulance movement is **simulated**, not tracked by hardware. Therefore, **no telemetry history table is required**. Only the latest ambulance location is stored.
 
 ---
 
-# 📌 **2. Technology & Design Constraints**
+# **2. Technology Requirements**
 
-The system strictly uses the following technologies:
+The ResQ system strictly uses:
 
-* **MySQL** — main relational database
-* **Node.js + Express** — backend runtime & API
-* **Socket.io** — real‑time communication
-* **HTML, TailwindCSS, Vanilla JS** — frontend
+* **MySQL** (InnoDB, utf8mb4)
+* **Node.js + Express** backend
+* **Socket.io** for real‑time updates
+* **HTML + TailwindCSS + Vanilla JS** frontend
 
-Database encoding:
+Character Set:
 
 ```
-CHARACTER SET: utf8mb4
-COLLATION: utf8mb4_general_ci
+utf8mb4 / utf8mb4_general_ci
 ```
 
-This ensures **full Arabic + English support**.
+Supports full **English + Arabic** data.
 
 ---
 
-# 📌 **3. Global Database Settings**
+# **3. Entity Relationship Summary**
+
+```
+users 1 ────∞ devices
+users 1 ────∞ incidents
+hospitals 1 ────∞ incidents
+ambulances 1 ────∞ incidents
+
+devices 1 ────∞ hardware_requests
+devices 1 ────∞ incidents
+
+incidents 1 ────∞ incident_logs
+visitor_searches 0/1 ──── 1 incidents (optional)
+
+settings, notifications, audit_admin_changes are standalone support tables.
+```
+
+---
+
+# **4. Tables Documentation**
+
+Each table includes: purpose, fields, field types, and descriptions.
+
+---
+
+## **4.1 users**
+
+**Purpose:** Stores all system accounts: Admin, Hospital, and Vehicle Owners.
+
+### **Fields**
+
+| Column        | Type                            | Description                    |
+| ------------- | ------------------------------- | ------------------------------ |
+| id            | BIGINT UNSIGNED                 | Primary key                    |
+| name          | VARCHAR(200)                    | Full name                      |
+| email         | VARCHAR(255) UNIQUE             | Login credential               |
+| password_hash | VARCHAR(255)                    | Hashed password                |
+| phone         | VARCHAR(30)                     | Contact number                 |
+| role          | ENUM('admin','user','hospital') | Account type                   |
+| lang          | CHAR(2)                         | Preferred language ('en','ar') |
+| is_active     | TINYINT(1)                      | Account status                 |
+| created_at    | TIMESTAMP                       | Creation timestamp             |
+| updated_at    | TIMESTAMP                       | Last update timestamp          |
+
+---
+
+## **4.2 devices**
+
+**Purpose:** Represents hardware installed inside vehicles.
+
+### **Fields**
+
+| Column     | Type                                    | Description           |
+| ---------- | --------------------------------------- | --------------------- |
+| id         | BIGINT UNSIGNED                         | Primary key           |
+| device_uid | VARCHAR(128) UNIQUE                     | Unique hardware ID    |
+| user_id    | BIGINT UNSIGNED                         | FK → users(id)        |
+| car_plate  | VARCHAR(50)                             | Vehicle plate         |
+| car_model  | VARCHAR(150)                            | Vehicle model         |
+| status     | ENUM('active','inactive','maintenance') | Device status         |
+| created_at | TIMESTAMP                               | Creation timestamp    |
+| updated_at | TIMESTAMP                               | Last update timestamp |
+
+---
+
+## **4.3 hospitals**
+
+**Purpose:** Stores hospital data and location.
+
+### **Fields**
+
+| Column          | Type                   | Description           |
+| --------------- | ---------------------- | --------------------- |
+| id              | BIGINT UNSIGNED        | Primary key           |
+| user_id         | BIGINT UNSIGNED UNIQUE | FK → users(id)        |
+| name            | VARCHAR(255)           | Hospital name         |
+| country         | VARCHAR(100)           | Country               |
+| governorate     | VARCHAR(100)           | Governorate           |
+| city            | VARCHAR(100)           | City                  |
+| street          | VARCHAR(255)           | Street                |
+| address_details | VARCHAR(500)           | Extra address info    |
+| lat             | DECIMAL(10,7)          | Latitude              |
+| lng             | DECIMAL(10,7)          | Longitude             |
+| phone           | VARCHAR(30)            | Contact number        |
+| created_at      | TIMESTAMP              | Creation timestamp    |
+| updated_at      | TIMESTAMP              | Last update timestamp |
+
+---
+
+## **4.4 ambulances**
+
+**Purpose:** Stores ambulance units and their latest known location.
+
+### **Fields**
+
+| Column     | Type                                                                       | Description           |
+| ---------- | -------------------------------------------------------------------------- | --------------------- |
+| id         | BIGINT UNSIGNED                                                            | Primary key           |
+| code       | VARCHAR(100) UNIQUE                                                        | Ambulance code        |
+| lat        | DECIMAL(10,7)                                                              | Latest latitude       |
+| lng        | DECIMAL(10,7)                                                              | Latest longitude      |
+| status     | ENUM('available','busy','offline','en_route_incident','en_route_hospital') | Current status        |
+| created_at | TIMESTAMP                                                                  | Creation timestamp    |
+| updated_at | TIMESTAMP                                                                  | Last update timestamp |
+
+---
+
+## **4.5 hardware_requests**
+
+**Purpose:** Stores all raw JSON data sent by the hardware device.
+
+### **Fields**
+
+| Column       | Type                                        | Description                         |
+| ------------ | ------------------------------------------- | ----------------------------------- |
+| id           | BIGINT UNSIGNED                             | Primary key                         |
+| device_id    | BIGINT UNSIGNED                             | FK → devices(id)                    |
+| lat          | DECIMAL(10,7)                               | Latitude reported by device         |
+| lng          | DECIMAL(10,7)                               | Longitude reported by device        |
+| request_type | ENUM('alert','cancel','heartbeat','status') | Request category                    |
+| raw_payload  | JSON                                        | Full raw data from hardware         |
+| incident_id  | BIGINT UNSIGNED NULL                        | Optional FK → incidents(id)         |
+| received_at  | TIMESTAMP                                   | When the server received the packet |
+
+---
+
+## **4.6 incidents**
+
+**Purpose:** Represents an accident case.
+
+### **Fields**
+
+| Column                | Type                                                                        | Description                          |
+| --------------------- | --------------------------------------------------------------------------- | ------------------------------------ |
+| id                    | BIGINT UNSIGNED                                                             | Primary key                          |
+| device_id             | BIGINT UNSIGNED                                                             | FK → devices(id)                     |
+| user_id               | BIGINT UNSIGNED NULL                                                        | FK → users(id)                       |
+| hardware_request_id   | BIGINT UNSIGNED NULL                                                        | FK → hardware_requests(id)           |
+| status                | ENUM('pending','confirmed','canceled','assigned','in_progress','completed') | Current status                       |
+| mode                  | ENUM('auto','manual')                                                       | Incident creation mode               |
+| lat                   | DECIMAL(10,7)                                                               | Latitude of incident                 |
+| lng                   | DECIMAL(10,7)                                                               | Longitude of incident                |
+| assigned_ambulance_id | BIGINT UNSIGNED NULL                                                        | FK → ambulances(id)                  |
+| assigned_hospital_id  | BIGINT UNSIGNED NULL                                                        | FK → hospitals(id)                   |
+| confirmation_deadline | TIMESTAMP                                                                   | End of 10-second confirmation window |
+| created_at            | TIMESTAMP                                                                   | Creation timestamp                   |
+| confirmed_at          | TIMESTAMP NULL                                                              | When confirmed                       |
+| resolved_at           | TIMESTAMP NULL                                                              | When resolved/closed                 |
+| updated_at            | TIMESTAMP                                                                   | Last update timestamp                |
+
+---
+
+## **4.7 incident_logs**
+
+**Purpose:** Tracks all changes/events related to an incident.
+
+### **Fields**
+
+| Column       | Type            | Description                      |
+| ------------ | --------------- | -------------------------------- |
+| id           | BIGINT UNSIGNED | Primary key                      |
+| incident_id  | BIGINT UNSIGNED | FK → incidents(id)               |
+| action       | VARCHAR(100)    | Action performed                 |
+| performed_by | VARCHAR(100)    | System/admin/hardware identifier |
+| note         | VARCHAR(1000)   | Extra details                    |
+| created_at   | TIMESTAMP       | Log timestamp                    |
+
+---
+
+## **4.8 visitor_searches**
+
+**Purpose:** Logs public search attempts by visitors.
+
+### **Fields**
+
+| Column              | Type                 | Description                 |
+| ------------------- | -------------------- | --------------------------- |
+| id                  | BIGINT UNSIGNED      | Primary key                 |
+| visitor_name        | VARCHAR(200)         | Name of visitor             |
+| visitor_email       | VARCHAR(255)         | Email of visitor            |
+| device_uid_searched | VARCHAR(128)         | Device UID entered          |
+| search_query_raw    | VARCHAR(255)         | Original query text         |
+| incident_id         | BIGINT UNSIGNED NULL | Optional FK → incidents(id) |
+| created_at          | TIMESTAMP            | Timestamp                   |
+
+---
+
+## **4.9 notifications**
+
+**Purpose:** Queue for outbound SMS/Email/Push notifications.
+
+### **Fields**
+
+| Column          | Type                            | Description            |
+| --------------- | ------------------------------- | ---------------------- |
+| id              | BIGINT UNSIGNED                 | Primary key            |
+| kind            | ENUM('sms','email','push')      | Notification type      |
+| recipient       | VARCHAR(255)                    | Target phone/email     |
+| payload         | JSON                            | Notification content   |
+| status          | ENUM('pending','sent','failed') | Delivery state         |
+| attempts        | TINYINT UNSIGNED                | Retry attempts         |
+| last_attempt_at | TIMESTAMP NULL                  | Last attempt timestamp |
+| created_at      | TIMESTAMP                       | Creation timestamp     |
+| updated_at      | TIMESTAMP                       | Update timestamp       |
+
+---
+
+## **4.10 settings**
+
+**Purpose:** Key/value configuration storage.
+
+### **Fields**
+
+| Column      | Type                     | Description                 |
+| ----------- | ------------------------ | --------------------------- |
+| key         | VARCHAR(200) PRIMARY KEY | Setting identifier          |
+| value       | TEXT                     | Setting value (string/JSON) |
+| description | VARCHAR(500)             | Description                 |
+| updated_at  | TIMESTAMP                | Last modified               |
+
+---
+
+## **4.11 audit_admin_changes**
+
+**Purpose:** Tracks admin-level sensitive system operations.
+
+### **Fields**
+
+| Column        | Type                 | Description               |
+| ------------- | -------------------- | ------------------------- |
+| id            | BIGINT UNSIGNED      | Primary key               |
+| admin_user_id | BIGINT UNSIGNED NULL | FK → users(id)            |
+| action        | VARCHAR(200)         | What action was performed |
+| target_table  | VARCHAR(100)         | Affected table            |
+| target_id     | BIGINT UNSIGNED NULL | Affected row ID           |
+| note          | VARCHAR(2000)        | Details about change      |
+| created_at    | TIMESTAMP            | Timestamp of action       |
+
+---
+
+# **5. Views**
+
+## **5.1 v_live_dashboard**
+
+Provides ready‑to‑use data for the Administrator Dashboard:
+
+* incident status
+* owner info
+* vehicle info
+* ambulance assigned
+* hospital assigned
+* minutes elapsed
+
+Filters out completed/canceled cases.
+
+---
+
+# **6. Stored Procedures**
+
+## **6.1 sp_find_nearest_ambulance(incidentId)**
+
+* Fetches incident location
+* Applies Haversine formula
+* Returns the closest available ambulance within 50 km
+
+## **6.2 sp_assign_ambulance(incidentId, ambulanceId, adminId)**
+
+* Atomic transaction
+* Updates incident → assigned
+* Updates ambulance → en_route_incident
+* Inserts log entry
+* Rolls back on failure
+
+---
+
+# **7. Data Retention & Archiving**
+
+Recommended operational rules:
+
+* `hardware_requests`: keep 1 year maximum
+* `incident_logs`: keep 3 years
+* `visitor_searches`: keep 6–12 months
+* `notifications`: keep 6 months
+
+Use archive tables or scheduled cleanup jobs for long‑term performance.
+
+---
+
+# **8. Security Guidelines**
+
+* Always store hashed passwords
+* Enforce prepared SQL statements
+* Separate DB users (app user / backup user)
+* Encrypt database backups
+* Protect visitor information
+* Apply rate‑limiting on public search API
+
+---
+
+# **9. Common SQL Queries**
+
+### Latest incident for a device
 
 ```sql
-CREATE DATABASE resq
-  CHARACTER SET utf8mb4
-  COLLATE utf8mb4_general_ci;
-USE resq;
+SELECT * FROM incidents i
+JOIN devices d ON i.device_id = d.id
+WHERE d.device_uid = 'DEV-TOY-2024'
+ORDER BY i.created_at DESC
+LIMIT 1;
 ```
 
----
-
-# 📌 **4. Entity Overview (Tables List)**
-
-The ResQ system contains the following core tables:
-
-1. **users** – all system accounts
-2. **devices** – hardware installed in vehicles
-3. **hospitals** – hospital information
-4. **ambulances** – ambulance vehicle tracking
-5. **hardware_requests** – raw device requests
-6. **incidents** – accident cases
-7. **incident_logs** – historical timeline of incident activity
-8. **visitor_searches** – public visitor search attempts *(NEW)*
-
----
-
-# 📌 **5. Table Documentation**
-
-Each table includes: purpose, field details, relationships, and SQL creation.
-
----
-
-# 🧩 **5.1 Users Table (`users`)**
-
-### Purpose
-
-Stores all system accounts: Admins, Vehicle Owners, and Hospital Accounts.
-
-### Key Fields
-
-* `name`, `email`, `phone`
-* `role`: admin/user/hospital
-* `lang`: preferred UI language (en/ar)
-* `is_active`: account status
-
-### SQL
+### Find nearest ambulance
 
 ```sql
-CREATE TABLE users (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(200) NOT NULL,
-  email VARCHAR(255) NOT NULL UNIQUE,
-  password_hash VARCHAR(255) NOT NULL,
-  phone VARCHAR(30),
-  role ENUM('admin','user','hospital') NOT NULL DEFAULT 'user',
-  lang CHAR(2) NOT NULL DEFAULT 'en',
-  is_active TINYINT(1) NOT NULL DEFAULT 1,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
+CALL sp_find_nearest_ambulance(incidentId);
 ```
 
----
-
-# 🧩 **5.2 Devices Table (`devices`)**
-
-### Purpose
-
-Represents hardware installed inside vehicles.
-
-### SQL
+### Dashboard feed
 
 ```sql
-CREATE TABLE devices (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  device_uid VARCHAR(128) NOT NULL UNIQUE,
-  user_id BIGINT UNSIGNED NOT NULL,
-  car_plate VARCHAR(50),
-  car_model VARCHAR(150),
-  status ENUM('active','inactive','maintenance') DEFAULT 'active',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
+SELECT * FROM v_live_dashboard ORDER BY minutes_elapsed ASC LIMIT 50;
 ```
 
 ---
 
-# 🧩 **5.3 Hospitals Table (`hospitals`)**
+# **10. Recommended Migration Strategy**
 
-### Purpose
+When evolving the schema:
 
-Stores hospital details, address, and location.
-
-### SQL
-
-```sql
-CREATE TABLE hospitals (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  user_id BIGINT UNSIGNED NOT NULL UNIQUE,
-  name VARCHAR(255) NOT NULL,
-  country VARCHAR(100),
-  governorate VARCHAR(100),
-  city VARCHAR(100),
-  street VARCHAR(255),
-  address_details VARCHAR(500),
-  lat DECIMAL(10,7),
-  lng DECIMAL(10,7),
-  phone VARCHAR(30),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-```
+1. Always add new fields as NULLABLE first.
+2. Backfill data.
+3. Then enforce NOT NULL if needed.
+4. Use versioned migration tools (Knex / Sequelize / Flyway).
 
 ---
 
-# 🧩 **5.4 Ambulances Table (`ambulances`)**
+# **11. Seed Data Overview**
 
-### Purpose
+The schema includes seed:
 
-Tracks ambulance vehicles and their last known location.
-
-### SQL
-
-```sql
-CREATE TABLE ambulances (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  code VARCHAR(100) NOT NULL UNIQUE,
-  lat DECIMAL(10,7),
-  lng DECIMAL(10,7),
-  status ENUM('available','busy','offline','en_route_incident','en_route_hospital') DEFAULT 'available',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
-```
+* Admin
+* Hospital user
+* Sample hospital
+* Three ambulances
+* One device
+* One hardware request
+* One incident + log
 
 ---
 
-# 🧩 **5.5 Hardware Requests Table (`hardware_requests`)**
+# **12. Design Decisions Summary**
 
-### Purpose
-
-Stores **raw JSON** data coming from hardware installed in vehicles.
-
-### SQL
-
-```sql
-CREATE TABLE hardware_requests (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  device_id BIGINT UNSIGNED NOT NULL,
-  lat DECIMAL(10,7),
-  lng DECIMAL(10,7),
-  request_type ENUM('alert','cancel','heartbeat','status') NOT NULL,
-  raw_payload JSON NOT NULL,
-  incident_id BIGINT UNSIGNED NULL,
-  received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
-);
-```
+* No telemetry table: movement simulated only.
+* `hardware_requests` kept for audit/debug.
+* `visitor_searches` added for public query tracking.
+* `settings` centralizes global switches.
+* `audit_admin_changes` ensures traceability.
 
 ---
-
-# 🧩 **5.6 Incidents Table (`incidents`)**
-
-### Purpose
-
-Represents an accident or emergency detected by a device.
-
-### SQL
-
-```sql
-CREATE TABLE incidents (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  device_id BIGINT UNSIGNED NOT NULL,
-  user_id BIGINT UNSIGNED NOT NULL,
-  hardware_request_id BIGINT UNSIGNED NOT NULL,
-  status ENUM('pending','confirmed','canceled','assigned','in_progress','completed') DEFAULT 'pending',
-  mode ENUM('auto','manual') DEFAULT 'auto',
-  lat DECIMAL(10,7),
-  lng DECIMAL(10,7),
-  assigned_ambulance_id BIGINT UNSIGNED NULL,
-  assigned_hospital_id BIGINT UNSIGNED NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  confirmed_at TIMESTAMP NULL,
-  resolved_at TIMESTAMP NULL,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (device_id) REFERENCES devices(id),
-  FOREIGN KEY (user_id) REFERENCES users(id),
-  FOREIGN KEY (hardware_request_id) REFERENCES hardware_requests(id),
-  FOREIGN KEY (assigned_ambulance_id) REFERENCES ambulances(id),
-  FOREIGN KEY (assigned_hospital_id) REFERENCES hospitals(id)
-);
-```
-
----
-
-# 🧩 **5.7 Incident Logs Table (`incident_logs`)**
-
-### Purpose
-
-Tracks all changes and events related to an incident.
-
-### SQL
-
-```sql
-CREATE TABLE incident_logs (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  incident_id BIGINT UNSIGNED NOT NULL,
-  action VARCHAR(100) NOT NULL,
-  performed_by VARCHAR(100) NOT NULL,
-  note VARCHAR(1000),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE CASCADE
-);
-```
-
----
-
-# 🧩 **5.8 Visitor Searches Table (`visitor_searches`)**
-
-### Purpose
-
-Logs public visitor search attempts for a Device UID from the landing page.
-
-### SQL
-
-```sql
-CREATE TABLE visitor_searches (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  visitor_name VARCHAR(200) NOT NULL,
-  visitor_email VARCHAR(255) NOT NULL,
-  device_uid_searched VARCHAR(128) NOT NULL,
-  search_query_raw VARCHAR(255) NULL,
-  incident_id BIGINT UNSIGNED NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE SET NULL
-);
-```
-
----
-
-# 📌 **6. 10‑Second Confirmation Workflow**
-
-* Device sends `alert` → incident created in `pending` state
-* User has **10 seconds** to cancel
-* If canceled → status becomes `canceled`
-* If no cancel → backend marks incident `confirmed`
-* System assigns nearest ambulance & nearest hospital
-* All steps logged in `incident_logs`
-
----
-
-# 📌 **7. Relationships Summary**
-
-* **User → Devices → Incidents → IncidentLogs**
-* **Device → HardwareRequests**
-* **Ambulance → Incidents**
-* **Hospital → Incidents**
-* **Visitor → visitor_searches → optional Incident**
-
----
-
-# 📌 **8. ER Diagram Structure**
-
-*(Textual description for GitHub — PNG version can be generated separately)*
-
-* `users` 1—∞ `devices`
-* `devices` 1—∞ `hardware_requests`
-* `devices` 1—∞ `incidents`
-* `users` 1—∞ `incidents`
-* `incidents` 1—∞ `incident_logs`
-* `ambulances` 1—∞ `incidents`
-* `hospitals` 1—∞ `incidents`
-* `visitor_searches` 0/1 — 1 `incidents``
-
----
-
-# 📌 **9. Backup & Maintenance**
-
-* Daily full backup
-* Hourly binlog incremental
-* Archive old hardware_requests
-* Monitor incident volume for scaling
-
----
-
-# 🎉 **10. End of Documentation**
-
- **ResQ MySQL Database**
