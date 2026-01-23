@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ResQ Hospital Net (SECURE) 🏥</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f3f4f6; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        .active-hospital { background-color: #eff6ff; border-right: 4px solid #2563eb; }
+        .card-enter { animation: slideIn 0.5s ease-out; }
+        @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    </style>
+</head>
+<body class="flex h-screen">
+
+    <div class="w-1/4 bg-white border-r shadow-lg flex flex-col z-10">
+        <div class="p-6 bg-blue-900 text-white">
+            <h1 class="text-xl font-bold"><i class="fas fa-hospital-symbol"></i> LIVE NET</h1>
+            <p class="text-xs text-blue-200 mt-1">Real-time DB Connection</p>
+        </div>
+        <div class="flex-1 overflow-y-auto" id="hospitalList">
+            <div class="text-center p-10 text-gray-400">Waiting for Token...</div>
+        </div>
+    </div>
+
+    <div class="flex-1 flex flex-col bg-gray-100 relative">
+        <div id="noSelection" class="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
+            <i class="fas fa-notes-medical text-6xl mb-4 opacity-30"></i>
+            <p class="text-xl">Select a hospital from the database list</p>
+        </div>
+
+        <div id="dashboardView" class="hidden flex-col h-full">
+            <div class="bg-white p-4 shadow-sm border-b flex justify-between items-center">
+                <div>
+                    <h2 class="text-xl font-bold text-gray-800" id="hospitalTitle">--</h2>
+                    <p class="text-xs text-green-600 font-bold">● CONNECTED</p>
+                </div>
+                <p class="font-mono font-bold text-xl text-gray-400" id="hospitalIdDisplay">--</p>
+            </div>
+
+            <div class="flex-1 p-6 overflow-y-auto">
+                <div id="casesContainer" class="grid grid-cols-1 xl:grid-cols-2 gap-6"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io('http://localhost:3000');
+        let currentHospitalId = null;
+        let AUTH_TOKEN = null;
+        let hospitalData = [];
+
+        window.onload = () => {
+            AUTH_TOKEN = prompt("🔐 SECURITY CHECK\nPlease paste your Admin/Hospital Bearer Token:");
+            if(AUTH_TOKEN) {
+                fetchHospitals();
+            } else {
+                alert("Token is required.");
+            }
+        };
+
+        async function fetchHospitals() {
+            try {
+                const response = await fetch('http://localhost:3000/api/hospitals', {
+                    headers: { 'Authorization': `Bearer ${AUTH_TOKEN}` }
+                });
+                if(response.status === 401) return alert("Invalid Token");
+                const result = await response.json();
+                if(result.status === 'success') {
+                    hospitalData = result.data.hospitals;
+                    renderList();
+                }
+            } catch (error) { console.error(error); }
+        }
+
+        function renderList() {
+            const container = document.getElementById('hospitalList');
+            container.innerHTML = '';
+            hospitalData.forEach(hosp => {
+                const el = document.createElement('div');
+                el.className = `cursor-pointer p-4 border-b hover:bg-gray-50 transition ${currentHospitalId === hosp.id ? 'active-hospital' : ''}`;
+                el.onclick = () => selectHospital(hosp.id, hosp.name);
+                el.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h3 class="font-bold text-gray-800">${hosp.name}</h3>
+                            <p class="text-xs text-gray-500">${hosp.city || 'Unknown City'}</p>
+                        </div>
+                        <i class="fas fa-chevron-right text-gray-300"></i>
+                    </div>
+                `;
+                container.appendChild(el);
+            });
+        }
+
+        function selectHospital(id, name) {
+            currentHospitalId = id;
+            renderList();
+            document.getElementById('noSelection').classList.add('hidden');
+            document.getElementById('dashboardView').classList.remove('hidden');
+            document.getElementById('dashboardView').classList.add('flex');
+            document.getElementById('hospitalTitle').innerText = name;
+            document.getElementById('hospitalIdDisplay').innerText = `#${id}`;
+            document.getElementById('casesContainer').innerHTML = ''; 
+            
+            socket.emit('join_hospital', id);
+            console.log(`Joined Hospital Room: ${id}`);
+        }
+
+        // --- Socket Listeners ---
+
+        // 1. Incoming Case
+        socket.on('incoming_case', (data) => {
+            createCard(data);
+        });
+
+        // 2. Cancellation Listener (THE FIX) 🛑
+        socket.on('mission_cancelled', (data) => {
+            const card = document.getElementById(`case-${data.incidentId}`);
+            if(card) {
+                // Visual feedback for cancellation
+                card.classList.remove('border-red-500');
+                card.classList.add('border-gray-400', 'opacity-50');
+                card.innerHTML = `
+                    <div class="p-6 text-center text-gray-500">
+                        <i class="fas fa-ban text-4xl mb-2"></i>
+                        <h3 class="font-bold text-lg">MISSION CANCELLED</h3>
+                        <p class="text-xs">False alarm or cancelled by user.</p>
+                    </div>
+                `;
+                // Remove after 3 seconds
+                setTimeout(() => card.remove(), 3000);
+            }
+        });
+
+        function createCard(data) {
+            const container = document.getElementById('casesContainer');
+            const card = document.createElement('div');
+            card.id = `case-${data.incidentId}`;
+            card.className = "bg-white rounded-xl shadow-md border-l-4 border-red-500 overflow-hidden card-enter";
+            card.innerHTML = `
+                <div class="p-5">
+                    <div class="flex justify-between mb-4">
+                        <span class="bg-red-100 text-red-600 px-3 py-1 rounded-full text-xs font-bold">INCOMING</span>
+                        <span class="text-gray-400 font-mono">#${data.incidentId}</span>
+                    </div>
+                    <p class="font-bold text-lg mb-2">Ambulance: ${data.ambulance_code}</p>
+                    <p class="text-gray-500 text-sm">Impact: ${data.g_force} G</p>
+                </div>
+                <button onclick="confirmArrival(${data.incidentId})" class="w-full bg-blue-600 text-white py-3 font-bold hover:bg-blue-700">CONFIRM ARRIVAL</button>
+            `;
+            container.prepend(card);
+        }
+
+        function confirmArrival(incidentId) {
+            socket.emit('complete_mission', { incidentId });
+            const card = document.getElementById(`case-${incidentId}`);
+            if(card) {
+                card.classList.replace('border-red-500', 'border-green-500');
+                card.querySelector('button').remove();
+                card.innerHTML += `<div class="p-4 bg-green-100 text-green-700 text-center font-bold">ADMITTED ✅</div>`;
+            }
+        }
+    </script>
+</body>
+</html>

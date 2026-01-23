@@ -17,10 +17,10 @@ Ambulance movement is **simulated**, not tracked by hardware. Therefore, **no te
 
 The ResQ system strictly uses:
 
-* **MySQL** (InnoDB, utf8mb4)
-* **Node.js + Express** backend
-* **Socket.io** for real‑time updates
-* **HTML + TailwindCSS + Vanilla JS** frontend
+- **MySQL** (InnoDB, utf8mb4)
+- **Node.js + Express** backend
+- **Socket.io** for real‑time updates
+- **HTML + TailwindCSS + Vanilla JS** frontend
 
 Character Set:
 
@@ -48,6 +48,7 @@ visitor_searches 0/1 ──── 1 incidents (optional)
 
 settings, notifications, audit_admin_changes are standalone support tables.
 ```
+
 ## Database ER Diagram
 
 ![ResQ Database ER Diagram](assets/DATABASE_ERD.svg)
@@ -281,12 +282,12 @@ Each table includes: purpose, fields, field types, and descriptions.
 
 Provides ready‑to‑use data for the Administrator Dashboard:
 
-* incident status
-* owner info
-* vehicle info
-* ambulance assigned
-* hospital assigned
-* minutes elapsed
+- incident status
+- owner info
+- vehicle info
+- ambulance assigned
+- hospital assigned
+- minutes elapsed
 
 Filters out completed/canceled cases.
 
@@ -296,17 +297,17 @@ Filters out completed/canceled cases.
 
 ## **6.1 sp_find_nearest_ambulance(incidentId)**
 
-* Fetches incident location
-* Applies Haversine formula
-* Returns the closest available ambulance within 50 km
+- Fetches incident location
+- Applies Haversine formula
+- Returns the closest available ambulance within 50 km
 
 ## **6.2 sp_assign_ambulance(incidentId, ambulanceId, adminId)**
 
-* Atomic transaction
-* Updates incident → assigned
-* Updates ambulance → en_route_incident
-* Inserts log entry
-* Rolls back on failure
+- Atomic transaction
+- Updates incident → assigned
+- Updates ambulance → en_route_incident
+- Inserts log entry
+- Rolls back on failure
 
 ---
 
@@ -314,10 +315,10 @@ Filters out completed/canceled cases.
 
 Recommended operational rules:
 
-* `hardware_requests`: keep 1 year maximum
-* `incident_logs`: keep 3 years
-* `visitor_searches`: keep 6–12 months
-* `notifications`: keep 6 months
+- `hardware_requests`: keep 1 year maximum
+- `incident_logs`: keep 3 years
+- `visitor_searches`: keep 6–12 months
+- `notifications`: keep 6 months
 
 Use archive tables or scheduled cleanup jobs for long‑term performance.
 
@@ -325,12 +326,12 @@ Use archive tables or scheduled cleanup jobs for long‑term performance.
 
 # **8. Security Guidelines**
 
-* Always store hashed passwords
-* Enforce prepared SQL statements
-* Separate DB users (app user / backup user)
-* Encrypt database backups
-* Protect visitor information
-* Apply rate‑limiting on public search API
+- Always store hashed passwords
+- Enforce prepared SQL statements
+- Separate DB users (app user / backup user)
+- Encrypt database backups
+- Protect visitor information
+- Apply rate‑limiting on public search API
 
 ---
 
@@ -375,22 +376,22 @@ When evolving the schema:
 
 The schema includes seed:
 
-* Admin
-* Hospital user
-* Sample hospital
-* Three ambulances
-* One device
-* One hardware request
-* One incident + log
+- Admin
+- Hospital user
+- Sample hospital
+- Three ambulances
+- One device
+- One hardware request
+- One incident + log
 
 ---
 
 # **12. Design Decisions Summary**
 
-* No telemetry table: movement simulated only.
-* `hardware_requests` kept for audit/debug.
-* `visitor_searches` added for public query tracking.
-* `settings` centralizes global switches.
-* `audit_admin_changes` ensures traceability.
+- No telemetry table: movement simulated only.
+- `hardware_requests` kept for audit/debug.
+- `visitor_searches` added for public query tracking.
+- `settings` centralizes global switches.
+- `audit_admin_changes` ensures traceability.
 
 ---

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ResQ Fleet Manager (SECURE) 🚑</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #0f172a; color: white; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+        .active-amb { border-left: 4px solid #3b82f6; background-color: #1e293b; }
+        .dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    </style>
+</head>
+<body class="flex h-screen">
+
+    <div class="w-1/3 bg-gray-900 border-r border-gray-800 flex flex-col">
+        <div class="p-6 border-b border-gray-800 bg-gray-900 z-10">
+            <h1 class="text-xl font-bold text-blue-400"><i class="fas fa-shield-alt mr-2"></i>SECURE FLEET</h1>
+            <p class="text-xs text-gray-500 mt-1">Authenticated Access Only</p>
+        </div>
+        <div class="flex-1 overflow-y-auto" id="ambulanceList">
+            <div class="text-center mt-10 text-gray-500">Waiting for Token...</div>
+        </div>
+    </div>
+
+    <div class="flex-1 flex flex-col relative bg-gray-900">
+        <div id="noSelection" class="absolute inset-0 flex flex-col items-center justify-center text-gray-600">
+            <i class="fas fa-lock text-6xl mb-6 opacity-20"></i>
+            <p class="text-xl font-light">Enter Admin Token to view fleet</p>
+        </div>
+        
+        <div id="driverView" class="hidden flex-col h-full bg-gray-900/95">
+            <div class="bg-gray-800 p-4 shadow-lg border-b border-gray-700 flex justify-between items-center">
+                <div class="flex items-center gap-4">
+                    <div class="bg-blue-600 text-white p-3 rounded-lg font-bold text-xl w-32 text-center truncate" id="headerAmbCode">--</div>
+                    <div>
+                        <h2 class="text-lg font-bold text-white">LIVE CONTROL</h2>
+                        <span class="text-xs text-green-400 font-mono">● AUTHENTICATED</span>
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="changeStatus('available')" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-xs font-bold">AVAILABLE</button>
+                    <button onclick="changeStatus('offline')" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded text-xs font-bold">OFFLINE</button>
+                </div>
+            </div>
+
+            <div class="flex-1 p-10 flex items-center justify-center">
+                <div id="viewWaiting" class="text-center hidden">
+                    <h3 class="text-3xl font-bold text-green-400">AVAILABLE</h3>
+                    <p class="text-gray-400 mt-2">Ready for dispatch</p>
+                </div>
+                <div id="viewOffline" class="text-center hidden opacity-50">
+                    <h3 class="text-3xl font-bold text-gray-400">OFFLINE</h3>
+                </div>
+                <div id="viewMission" class="hidden w-full max-w-2xl bg-gray-800 p-8 rounded-xl border border-red-500/50">
+                    <h2 class="text-2xl font-bold text-red-500 mb-4 animate-pulse">⚠️ MISSION ASSIGNED</h2>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-gray-700 p-4 rounded"><p class="text-xs text-gray-400">Location</p><p id="crashLoc" class="font-mono">--</p></div>
+                        <div class="bg-gray-700 p-4 rounded"><p class="text-xs text-gray-400">Destination</p><p id="destHosp" class="font-bold text-blue-300">--</p></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io('http://localhost:3000');
+        let fleetData = [];
+        let currentId = null;
+        let AUTH_TOKEN = null;
+
+        window.onload = () => {
+            AUTH_TOKEN = prompt("🔐 SECURITY CHECK\nPlease paste your Admin Bearer Token:");
+            if(AUTH_TOKEN) {
+                fetchRealData();
+                // 🔥 هام جداً: الانضمام لغرفة الأدمن لاستقبال التحديثات العامة
+                socket.emit('join_dashboard'); 
+                console.log("Joined Dashboard Room for Live Updates");
+            } else {
+                alert("Token is required.");
+            }
+        };
+
+        async function fetchRealData() {
+            try {
+                const response = await fetch('http://localhost:3000/api/ambulances', {
+                    headers: {
+                        'Authorization': `Bearer ${AUTH_TOKEN}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                if(response.status === 401 || response.status === 403) return alert("⛔ Invalid Token!");
+                
+                const result = await response.json();
+                if(result.status === 'success') {
+                    fleetData = result.data.ambulances;
+                    renderFleetList();
+                }
+            } catch (error) { console.error(error); }
+        }
+
+        function renderFleetList() {
+            const container = document.getElementById('ambulanceList');
+            container.innerHTML = '';
+            
+            fleetData.forEach(amb => {
+                const isSelected = currentId === amb.id;
+                const statusColor = amb.status === 'available' ? 'bg-green-500' : amb.status === 'busy' ? 'bg-red-500' : 'bg-gray-500';
+                const statusText = amb.status === 'available' ? 'text-green-400' : amb.status === 'busy' ? 'text-red-400' : 'text-gray-400';
+
+                const el = document.createElement('div');
+                el.className = `cursor-pointer p-4 border-b border-gray-800 hover:bg-gray-800 transition ${isSelected ? 'active-amb' : ''}`;
+                el.onclick = () => selectAmbulance(amb.id);
+
+                el.innerHTML = `
+                    <div class="font-bold text-lg">${amb.code || amb.plate_number || 'Unknown'}</div>
+                    <div class="flex items-center gap-2 text-xs mt-1">
+                        <span class="dot ${statusColor}"></span>
+                        <span class="${statusText} uppercase font-bold">${amb.status}</span>
+                    </div>
+                `;
+                container.appendChild(el);
+            });
+        }
+
+        function selectAmbulance(id) {
+            currentId = id;
+            const amb = fleetData.find(a => a.id === id);
+            renderFleetList();
+            
+            document.getElementById('noSelection').classList.add('hidden');
+            document.getElementById('driverView').classList.remove('hidden');
+            document.getElementById('driverView').classList.add('flex');
+            
+            document.getElementById('headerAmbCode').innerText = amb.code || amb.plate_number;
+            
+            // انضمام لغرفة السائق الخاصة أيضاً
+            socket.emit('join_driver', id);
+            updateView(amb.status);
+        }
+
+        function changeStatus(newStatus) {
+            if(!currentId) return;
+            socket.emit('update_driver_status', { ambulanceId: currentId, status: newStatus });
+        }
+
+        function updateView(status) {
+            document.getElementById('viewWaiting').classList.add('hidden');
+            document.getElementById('viewOffline').classList.add('hidden');
+            document.getElementById('viewMission').classList.add('hidden');
+
+            if(status === 'available') document.getElementById('viewWaiting').classList.remove('hidden');
+            else if(status === 'offline') document.getElementById('viewOffline').classList.remove('hidden');
+            else if(status === 'busy') document.getElementById('viewMission').classList.remove('hidden');
+        }
+
+        // --- Live Socket Events ---
+
+        // 1. Mission Received (Specific Driver)
+        socket.on('request_rescue', (data) => {
+            const amb = fleetData.find(a => a.id === currentId);
+            if(amb) {
+                document.getElementById('crashLoc').innerText = `${data.crash_location.lat}, ${data.crash_location.lng}`;
+                document.getElementById('destHosp').innerText = data.hospital_location.name;
+            }
+        });
+
+        // 2. Global Status Update (The FIX)
+        socket.on('ambulance_status_changed', (data) => {
+            console.log(`Update: Amb #${data.ambulanceId} -> ${data.status}`);
+            const targetId = Number(data.ambulanceId);
+            const amb = fleetData.find(a => Number(a.id) === targetId);
+            
+            if (amb) {
+                amb.status = data.status;
+                renderFleetList(); // Refresh list immediately
+                if (currentId && Number(currentId) === targetId) {
+                    updateView(data.status);
+                }
+            }
+        });
+
+        // 3. Mission Completed Ack
+        socket.on('mission_completed_ack', () => {
+             alert("Mission Completed.");
+        });
+        
+        // 4. Mission Cancelled Ack
+        socket.on('mission_cancelled', () => {
+            alert("Mission Cancelled!");
+        });
+    </script>
+</body>
+</html>

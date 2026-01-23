@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ResQ Hardware Simulator 🚗</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        body { background-color: #1a202c; color: #e2e8f0; font-family: 'Courier New', monospace; }
+        .log-box { height: 200px; overflow-y: auto; }
+        .btn-press { transition: transform 0.1s; }
+        .btn-press:active { transform: scale(0.95); }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-lg bg-gray-800 rounded-xl shadow-2xl overflow-hidden border border-gray-700">
+        
+        <div class="bg-gray-900 p-4 border-b border-gray-700 flex justify-between items-center">
+            <h1 class="text-xl font-bold text-blue-400">🚗 ResQ Simulator</h1>
+            <div id="status" class="px-3 py-1 rounded-full text-xs font-bold bg-red-900 text-red-200">
+                Disconnected
+            </div>
+        </div>
+
+        <div class="p-6 space-y-4">
+            <div>
+                <label class="block text-xs uppercase text-gray-500 mb-1">Device UID</label>
+                <input type="text" id="deviceUid" value="HW-7788-XY" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white focus:outline-none focus:border-blue-500">
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs uppercase text-gray-500 mb-1">Latitude</label>
+                    <input type="text" id="lat" value="30.0444" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white">
+                </div>
+                <div>
+                    <label class="block text-xs uppercase text-gray-500 mb-1">Longitude</label>
+                    <input type="text" id="lng" value="31.2357" class="w-full bg-gray-700 border border-gray-600 rounded p-2 text-white">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs uppercase text-gray-500 mb-1">G-Force Impact</label>
+                <input type="range" id="gForce" min="1" max="10" step="0.1" value="4.5" class="w-full accent-blue-500">
+                <div class="text-right text-xs text-blue-300" id="gForceVal">4.5 G</div>
+            </div>
+        </div>
+
+        <div class="p-6 bg-gray-900 border-t border-gray-700 text-center space-y-3">
+            
+            <button id="btnCrash" onclick="sendCrash()" class="btn-press w-full bg-red-600 hover:bg-red-500 text-white font-bold py-4 rounded-lg text-lg shadow-[0_0_15px_rgba(220,38,38,0.5)]">
+                🚨 REPORT ACCIDENT
+            </button>
+
+            <button id="btnCancel" onclick="cancelCrash()" disabled class="btn-press w-full bg-gray-600 text-gray-400 font-bold py-3 rounded-lg opacity-50 cursor-not-allowed">
+                ✅ I AM SAFE (CANCEL)
+            </button>
+
+        </div>
+
+        <div class="p-4 bg-black font-mono text-xs">
+            <div class="text-gray-500 mb-2">System Logs:</div>
+            <div id="logs" class="log-box space-y-1 text-green-400">
+                </div>
+        </div>
+
+    </div>
+
+    <script>
+        const socket = io('http://localhost:3000'); // Connect to Backend
+        let currentIncidentId = 1;
+
+        const statusEl = document.getElementById('status');
+        const logsEl = document.getElementById('logs');
+        const btnCancel = document.getElementById('btnCancel');
+        
+        // Update G-Force Label
+        document.getElementById('gForce').addEventListener('input', (e) => {
+            document.getElementById('gForceVal').innerText = e.target.value + ' G';
+        });
+
+        // 1. Connection Events
+        socket.on('connect', () => {
+            statusEl.innerText = "ONLINE 🟢";
+            statusEl.className = "px-3 py-1 rounded-full text-xs font-bold bg-green-900 text-green-200";
+            log("Connected to Server ID: " + socket.id);
+        });
+
+        socket.on('disconnect', () => {
+            statusEl.innerText = "OFFLINE 🔴";
+            statusEl.className = "px-3 py-1 rounded-full text-xs font-bold bg-red-900 text-red-200";
+            log("Disconnected from Server");
+        });
+
+        // 2. Send Crash
+        function sendCrash() {
+            const data = {
+                device_uid: document.getElementById('deviceUid').value,
+                latitude: document.getElementById('lat').value,
+                longitude: document.getElementById('lng').value,
+                g_force: document.getElementById('gForce').value
+            };
+            
+            log(`🚨 Sending Crash Alert...`);
+            socket.emit('report_accident', data);
+        }
+
+        // 3. Receive Confirmation
+        socket.on('report_received', (data) => {
+            log(`✅ Server Acknowledged! Incident ID: ${data.incidentId}`);
+            currentIncidentId = data.incidentId;
+            
+            // Enable Cancel Button
+            btnCancel.disabled = false;
+            btnCancel.classList.remove('bg-gray-600', 'text-gray-400', 'opacity-50', 'cursor-not-allowed');
+            btnCancel.classList.add('bg-yellow-600', 'hover:bg-yellow-500', 'text-white', 'shadow-lg');
+        });
+
+        // 4. Cancel Crash
+        function cancelCrash() {
+            if (!currentIncidentId) return;
+
+            log(`↩️ Cancelling Incident #${currentIncidentId}...`);
+            socket.emit('cancel_accident', { incidentId: currentIncidentId });
+
+            // Reset Button
+            btnCancel.disabled = true;
+            btnCancel.classList.add('bg-gray-600', 'text-gray-400', 'opacity-50', 'cursor-not-allowed');
+            btnCancel.classList.remove('bg-yellow-600', 'hover:bg-yellow-500', 'text-white', 'shadow-lg');
+            
+            log(`🆗 Cancellation Sent.`);
+            currentIncidentId = null;
+        }
+
+        // 5. Error Handling
+        socket.on('error', (err) => {
+            log(`❌ ERROR: ${err.message}`);
+        });
+
+        // Helper: Logger
+        function log(msg) {
+            const div = document.createElement('div');
+            div.innerText = `> ${msg}`;
+            logsEl.appendChild(div);
+            logsEl.scrollTop = logsEl.scrollHeight;
+        }
+    </script>
+</body>
+</html>
